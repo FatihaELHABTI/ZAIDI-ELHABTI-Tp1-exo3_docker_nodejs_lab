@@ -1,0 +1,32 @@
+# Dockerfile.optim (optimisé, basé sur alpine + copie sélective)
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Install dependencies (only prod)
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy source
+COPY server.js ./
+
+# Final image
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+# pour le healthcheck on installera wget (alpine possède busybox wget)
+RUN apk add --no-cache ca-certificates
+
+# Copier uniquement ce qui est nécessaire
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/server.js ./server.js
+COPY package*.json ./
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+# Healthcheck: teste l'endpoint /api/health
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s CMD wget -q --spider http://localhost:3000/api/health || exit 1
+
+CMD ["node", "server.js"]
